@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { getIterator, getRandom, getEmailAddresses, getNames } from './index';
+import { getIterator, getEmailAddresses, getNames } from './index';
 import kaanon from './kaanon.json';
 
 // Mock the kaanon.json data
@@ -16,20 +16,19 @@ vi.mock('./kaanon.json', () => ({
 
 describe('Kaanon Iterator', () => {
   describe('getIterator', () => {
-    it('should return an iterator', () => {
+    it('should return an iterator with next and take methods', () => {
       const iterator = getIterator();
       expect(iterator.next).toBeDefined();
+      expect(iterator.take).toBeDefined();
     });
 
     it('should iterate through all items when no categories are specified', () => {
       const iterator = getIterator();
       const results = new Set();
       
-      for (let i = 0; i < Object.keys(kaanon).length; i++) {
-        const { value, done } = iterator.next();
-        if (!done) {
-          results.add(value);
-        }
+      let value;
+      while ((value = iterator.next()) !== "") {
+        results.add(value);
       }
 
       expect(results.size).toBe(6);
@@ -43,9 +42,8 @@ describe('Kaanon Iterator', () => {
       const iterator = getIterator(['category1']);
       const results = new Set();
       
-      while (true) {
-        const { value, done } = iterator.next();
-        if (done) break;
+      let value;
+      while ((value = iterator.next()) !== "") {
         results.add(value);
       }
 
@@ -54,51 +52,54 @@ describe('Kaanon Iterator', () => {
       expect(results).toContain('item2');
     });
 
-    it('should return done=true when exhausted', () => {
+    it('should return default value when exhausted', () => {
       const iterator = getIterator();
       // Exhaust the iterator
-      for (let i = 0; i < Object.keys(kaanon).length; i++) {
-        iterator.next();
-      }
-      expect(iterator.next().done).toBe(true);
+      while (iterator.next() !== "") {}
+      
+      expect(iterator.next()).toBe("");
     });
-  });
 
-  describe('getRandom', () => {
-    it('should return the requested number of items', () => {
-      const items = getRandom(2);
+    it('should take specified number of items', () => {
+      const iterator = getIterator();
+      const items = iterator.take(2);
       expect(items).toHaveLength(2);
     });
 
-    it('should return all available items if count exceeds available items', () => {
-      const items = getRandom(10);
+    it('should take all available items if count exceeds available items', () => {
+      const iterator = getIterator();
+      const items = iterator.take(10);
       expect(items).toHaveLength(6); // Total number of items in mock data
     });
 
-    it('should return items from specified category only', () => {
-      const items = getRandom(10, ['category1']);
-      expect(items).toHaveLength(2);
-      items.forEach(item => {
-        expect(['item1', 'item2']).toContain(item);
-      });
+    it('should report done status correctly via isDone', () => {
+      const iterator = getIterator();
+      expect(iterator.isDone()).toBe(false);
+      
+      // Exhaust the iterator
+      while (iterator.next() !== "") {}
+      
+      expect(iterator.isDone()).toBe(true);
     });
 
-    it('should return empty array when no items match category', () => {
-      const items = getRandom(10, ['nonexistent']);
-      expect(items).toHaveLength(0);
-    });
-
-    it('should return unique items', () => {
-      const items = getRandom(4);
-      const uniqueItems = new Set(items);
-      expect(uniqueItems.size).toBe(items.length);
+    it('should call mapper with undefined when exhausted', () => {
+      const mockMapper = vi.fn(x => x === undefined ? "default" : x);
+      const iterator = getIterator([], mockMapper);
+      
+      // Exhaust the iterator
+      while (iterator.next() !== "default") {}
+      
+      // Verify the mapper was called with undefined
+      expect(mockMapper).toHaveBeenCalledWith(undefined);
+      expect(iterator.next()).toBe("default");
     });
   });
 });
 
 describe('getEmailAddresses', () => {
   it('should create valid email addresses from names', () => {
-    const emails = getEmailAddresses();
+    const iterator = getEmailAddresses();
+    const emails = iterator.take(Infinity);
     expect(emails).toHaveLength(2);
     emails.forEach(email => {
       expect(email).toMatch(/^[a-z.]+@example\.com$/);
@@ -106,42 +107,64 @@ describe('getEmailAddresses', () => {
   });
 
   it('should handle scandinavian characters correctly', () => {
-    const emails = getEmailAddresses();
+    const iterator = getEmailAddresses();
+    const emails = iterator.take(Infinity);
     expect(emails).toContain('matti.meikalainen@example.com');
     expect(emails).toContain('ake.orn@example.com');
   });
 
-  it('should respect the count parameter', () => {
-    const emails = getEmailAddresses(1);
-    expect(emails).toHaveLength(1);
+  it('should return emails one by one via next()', () => {
+    const iterator = getEmailAddresses();
+    const firstEmail = iterator.next();
+    expect(firstEmail).toMatch(/^[a-z.]+@example\.com$/);
   });
 
   it('should use custom server domain when provided', () => {
-    const emails = getEmailAddresses(Infinity, 'custom.org');
+    const iterator = getEmailAddresses('custom.org');
+    const emails = iterator.take(Infinity);
     expect(emails).toHaveLength(2);
     emails.forEach(email => {
       expect(email).toMatch(/^[a-z.]+@custom\.org$/);
     });
   });
+
+  it('should return anonymous email when iterator is exhausted', () => {
+    const iterator = getEmailAddresses('example.com');
+    // Exhaust the iterator first
+    const allEmails = iterator.take(Infinity);
+    expect(iterator.isDone()).toBe(true);
+    expect(iterator.next()).toBe('anonymous@example.com');
+  });
 });
 
 describe('getNames', () => {
     it('should return properly formatted names', () => {
-        const names = getNames();
+        const iterator = getNames();
+        const names = iterator.take(Infinity);
         expect(names).toHaveLength(2);
         expect(names).toContain('Matti Meikäläinen');
         expect(names).toContain('Åke Örn');
     });
 
-    it('should respect the count parameter', () => {
-        const names = getNames(1);
-        expect(names).toHaveLength(1);
+    it('should return names one by one via next()', () => {
+        const iterator = getNames();
+        const firstName = iterator.next();
+        expect(firstName).toMatch(/^[A-ZÅÄÖ][a-zåäö]+ [A-ZÅÄÖ][a-zåäö]+$/);
     });
 
     it('should properly capitalize mixed case input', () => {
         // Add a mixed case name to the mock
         vi.mocked(kaanon)['mIkKo tEIkäLäINEN'] = ['nimi'];
-        const names = getNames();
+        const iterator = getNames();
+        const names = iterator.take(Infinity);
         expect(names).toContain('Mikko Teikäläinen');
+    });
+
+    it('should return anonymous name when iterator is exhausted', () => {
+        const iterator = getNames();
+        // Exhaust the iterator first
+        const allNames = iterator.take(Infinity);
+        expect(iterator.isDone()).toBe(true);
+        expect(iterator.next()).toBe('Anonymous User');
     });
 }); 
