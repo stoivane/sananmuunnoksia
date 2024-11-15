@@ -1,0 +1,20 @@
+{
+    "name": "kaanon",
+    "description": "Utilities for the Kaanon",
+    "authors": "tjjalava@iki.fi",
+    "version": "1.0.0",
+    "module": "index.js",
+    "type": "module",
+    "types": "index.d.ts",
+    "files": [
+        "index.js",
+        "index.d.ts",
+        "kaanon.json"
+    ],
+    "scripts": {
+        "test": "vitest"
+    },
+    "devDependencies": {
+        "vitest": "^2.1.5"
+    }
+}
